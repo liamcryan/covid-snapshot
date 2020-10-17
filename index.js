@@ -4,7 +4,6 @@ Historic values for all states
 
 */
 
-// very helpful for bar chart: https://observablehq.com/@d3/horizontal-bar-chart
 function toDate (d) {
   d = d.toString()
   return new Date(d.slice(0,4), parseInt(d.slice(4,6)) - 1, d.slice(6,8))
@@ -18,7 +17,9 @@ function choroplethChart (data, metric, date, states) {
   let maxMetricVal = 0;
 
   data.reduce((res, d) => {
-
+    if (!Object.keys(states).includes(d.state)) {
+      return res;
+    }
     if (!res[d.state]) {
       res[d.state] = {'date': date, 'abbreviation': d.state};
       res[d.state][metric] = 0;
@@ -33,14 +34,13 @@ function choroplethChart (data, metric, date, states) {
         maxMetricVal = d[metric];
       }
     }
-    return res
+    return res;
   }, {});
 
   let margin = {top: 20, right: 30, bottom: 30, left: 60};
   const width = 1000;
   const height = 650;
 
-  console.log(choroplethData);
   color = d3.scaleQuantize([minMetricVal-.25*maxMetricVal, maxMetricVal], d3.schemeBlues[9]);
 
   path = d3.geoPath();
@@ -55,7 +55,13 @@ function choroplethChart (data, metric, date, states) {
     .selectAll('path')
     .data(topojson.feature(us, us.objects.states).features)
     .join('path')
-      .attr("fill", d => color(choroplethData[d.properties.name][metric]))
+      .attr("fill", d => {
+        if (Object.keys(choroplethData).includes(d.properties.name)) {
+          return color(choroplethData[d.properties.name][metric]);
+        } else {
+          return color(0);
+        }
+      })
       .attr('d', path);
 
   svg.append('path')
@@ -66,6 +72,9 @@ function choroplethChart (data, metric, date, states) {
     .attr('d', path);
 
   function displayStateText(d) {
+    if (!Object.keys(choroplethData).includes(d.properties.name)) {
+      return null;
+    }
     if (choroplethData[d.properties.name][metric] == maxMetricVal) {
       return maxMetricVal;
     }
@@ -79,14 +88,12 @@ function choroplethChart (data, metric, date, states) {
     .attr('x', d => path.centroid(d)[0])
     .attr('y', d => path.centroid(d)[1])
     .attr('text-anchor', 'middle')
-    .attr('fill', 'white')
+    .attr('fill', '#C8C8C8')
     .attr('font-family', 'sans-serif')
     .attr('font-size', 14);
 
   return svg.node()
 }
-
-
 
 
 function lineChart (data, metric, date, states) {
@@ -164,7 +171,8 @@ function barChart (data, metric, date, states) {
   let height = Math.ceil((data.length + 0.1) * barHeight) + margin.top + margin.bottom;
 
   x = d3.scaleLinear()
-      .domain([d3.min(data, d => d[metric]), d3.max(data, d => d[metric])])
+      // .domain([d3.min(data, d => d[metric]), d3.max(data, d => d[metric])])
+      .domain([0, d3.max(data, d => d[metric])])
       .range([margin.left, width - margin.right])
 
   y = d3.scaleBand()
@@ -210,23 +218,37 @@ function barChart (data, metric, date, states) {
       .attr('text-anchor', 'start'));
 
   svg.append('g')
-      .call(yAxis)
-      .call(g => g.select('.domain').remove());
+      .call(yAxis);
 
   return svg.node();
 
 }
 
+function update (data, metric, date, states) {
 
-let metrics = ['positiveIncrease', 'deathIncrease']
-let metric = metrics[0];
-let today;
+  let chart1 = barChartElement.getElementsByTagName('svg')[0];
+  let chart2 = lineChartElement.getElementsByTagName('svg')[0];
+  let chart3 = choroplethChartElement.getElementsByTagName('svg')[0];
+
+  chart1.parentNode.replaceChild(barChart(data, metric, date, states), chart1);
+  chart2.parentNode.replaceChild(lineChart(data, metric, date, states), chart2);
+  chart3.parentNode.replaceChild(choroplethChart(data, metric, date, states), chart3);
+
+}
+
+
+let metric = 'positiveIncrease';
+// let metrics = ['positiveIncrease', 'deathIncrease'];
+let metrics = {'positiveIncrease': 'New Cases', 'deathIncrease': 'New Deaths'};
+let date;
+let covidData;
+
 let us;
 let states = {
   AK: 'Alaska',
   AL: 'Alabama',
   AR: 'Arkansas',
-  AS: 'American Samoa',
+  // AS: 'American Samoa',
   AZ: 'Arizona',
   CA: 'California',
   CO: 'Colorado',
@@ -281,21 +303,90 @@ let states = {
   WY: 'Wyoming',
 }
 
+// initialize the filters
+let metricElement = document.getElementById('metric');
+let dateElement = document.getElementById('date');
+let statesElement = document.getElementById('states');
+let barChartElement = document.getElementById('bar-chart');
+let lineChartElement = document.getElementById('line-chart');
+let choroplethChartElement = document.getElementById('choropleth-chart');
+
+function initializeMetrics () {
+  Object.keys(metrics).forEach((_, i) => {
+    let option = document.createElement('option');
+    option.setAttribute('value', _);
+    option.textContent = metrics[_];
+    metricElement.append(option);
+  });
+}
+
+function initializeDate () {
+  let dates = [];
+  covidData.forEach((_, i) => {
+    if (!dates.includes(_.date)) {
+      dates.push(_.date)
+    }
+  });
+  dates.forEach((_, i) => {
+    let option = document.createElement('option');
+    option.setAttribute('value', _);
+    option.textContent = _;
+    dateElement.append(option);
+  });
+}
+
+function initializeStates () {
+  Object.keys(states).forEach((_, i) => {
+    let option = document.createElement('option');
+    option.setAttribute('value', _);
+    option.textContent = states[_];
+    statesElement.append(option);
+  });
+}
+
+initializeStates();
+initializeMetrics();
+// initialize date depends on the covidData...
+
+function getMetric() {
+  return metricElement.querySelector('option:checked').value;
+}
+
+function getDate () {
+  return parseInt(dateElement.querySelector('option:checked').value);
+}
+
+function getState () {
+  let states_ = statesElement.querySelector('option:checked').value;
+  if (states_ == 'All States') {
+    return states;
+  }
+  let ret = {};
+  ret[states_] = states[states_];
+  return ret;
+
+}
+
+[metricElement, dateElement, statesElement].forEach((_, i) => {
+  _.addEventListener('change', () => {
+    // get current date, state & metric
+    update(covidData, getMetric(), getDate(), getState());
+  })
+})
+
+
 d3.json('https://cdn.jsdelivr.net/npm/us-atlas@3/states-albers-10m.json')
   .then(data => us = data);
 
 d3.json('https://api.covidtracking.com/api/v1/states/daily.json')
   .then(data => {
-    today = data[0].date;
-    return data;
+    covidData = data;
+    date = data[0].date;
+    initializeDate();
+    return data
   })
   .then(data => {
-      const barChartDiv = document.getElementById('bar-chart');
-      barChartDiv.append(barChart(data, metric, today, states));
-
-      const lineChartDiv = document.getElementById('line-chart');
-      lineChartDiv.append(lineChart(data, metric, today, states));
-
-      const choroplethChartDiv = document.getElementById('choropleth-chart');
-      choroplethChartDiv.append(choroplethChart(data, metric, today, states));
+      barChartElement.append(barChart(data, metric, date, states));
+      lineChartElement.append(lineChart(data, metric, date, states));
+      choroplethChartElement.append(choroplethChart(data, metric, date, states));
     });
