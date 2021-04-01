@@ -378,7 +378,8 @@ function getState () {
 d3.json('https://cdn.jsdelivr.net/npm/us-atlas@3/states-albers-10m.json')
   .then(data => us = data);
 
-d3.json('https://api.covidtracking.com/api/v1/states/daily.json')
+//d3.json('https://api.covidtracking.com/api/v1/states/daily.json')
+d3.json('https://raw.githubusercontent.com/liamcryan/covid-snapshot/master/covid-tracking-states-daily.json')
   .then(data => {
     covidData = data;
     date = data[0].date;
